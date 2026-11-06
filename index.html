@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AR Visor • Visor 3D y Realidad Aumentada</title>
+    <meta name="description" content="Visualización profesional de modelos 3D en Realidad Aumentada con detección automática de superficies.">
+    <meta name="theme-color" content="#07080c">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='24' height='24' rx='6' fill='%2307080c' stroke='none'/%3E%3Cpath transform='translate(3 3) scale(.75)' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/%3E%3C/svg%3E">
+
+    <!-- Open Graph / redes sociales -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="AR Visor • Visor 3D y Realidad Aumentada">
+    <meta property="og:description" content="Explora modelos 3D interactivos y colócalos en tu espacio con Realidad Aumentada.">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!-- Preconexiones para rendimiento -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ajax.googleapis.com" crossorigin>
+
+    <!-- Tipografía Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google <model-viewer> (CDN) -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
+    <!-- Configuración de Tailwind (requerida inline por el CDN) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+
+    <!-- Analítica (GA4) — se activa poniendo el ID en analytics.js -->
+    <script src="./analytics.js"></script>
+
+    <!-- Estilos propios -->
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+    <!-- ===================== HERO: ESCENARIO 3D A PANTALLA COMPLETA ===================== -->
+    <section id="stage" class="hero">
+        <model-viewer
+            id="ar-model"
+            src="./apartamento1.glb"
+            ios-src="./apartamento1.usdz"
+            alt="Apartamento 1 - interior 3D"
+            ar
+            ar-modes="webxr scene-viewer quick-look"
+            autoplay
+            animation-name="Animation"
+            animation-crossfade-duration="0"
+            ar-scale="auto"
+            ar-placement="auto"
+            camera-controls
+            touch-action="pan-y"
+            auto-rotate
+            auto-rotate-delay="1200"
+            rotation-per-second="18deg"
+            camera-orbit="20deg 72deg 105%"
+            min-camera-orbit="auto auto auto"
+            max-camera-orbit="auto auto 170%"
+            shadow-intensity="1"
+            shadow-softness="1"
+            exposure="1.05"
+            interaction-prompt="none"
+            loading="eager"
+            reveal="auto"
+            aria-label="Visualizador 3D interactivo. Arrastra para rotar, scroll para zoom.">
+
+            <!-- Pantalla de carga a pantalla completa -->
+            <div id="loading-spinner" slot="poster" class="loader">
+                <div class="loader-logo">
+                    <span class="logo-badge loader-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></span>
+                </div>
+                <div class="loader-bar-wrap">
+                    <div class="loader-bar-track"><div id="load-bar" class="loader-bar-fill"></div></div>
+                    <p id="load-pct" class="loader-pct">Cargando modelo… 0%</p>
+                </div>
+            </div>
+        </model-viewer>
+
+        <!-- Viñeta / degradados para legibilidad de la UI flotante -->
+        <div class="vignette" aria-hidden="true"></div>
+        <div class="top-scrim" aria-hidden="true"></div>
+
+        <!-- Barra superior flotante -->
+        <header class="topbar">
+            <div class="brand">
+                <span class="logo-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></span>
+                <div class="brand-text">
+                    <span class="brand-name">AR <span class="text-accent2">Visor</span></span>
+                    <span class="brand-sub">Visor 3D · Realidad Aumentada</span>
+                </div>
+            </div>
+            <div class="topbar-actions">
+                <button id="open-panel" class="icon-btn" aria-label="Modelos" title="Modelos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/></svg>
+                </button>
+                <button id="help-btn" class="icon-btn" aria-label="Ayuda" title="Ayuda">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Dock inferior izquierdo: nombre del modelo + reactivar -->
+        <div class="dock dock-left">
+            <button id="model-switch" class="info-pill" aria-label="Cambiar modelo" title="Cambiar modelo">
+                <span class="info-dot"></span>
+                <span id="model-name" class="info-name">Apartamento 1</span>
+                <svg class="info-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>
+            </button>
+            <div id="replay-container" class="hidden">
+                <button id="replay-anim" class="btn btn-glass replay-btn" aria-label="Reactivar animación">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Reactivar
+                </button>
+            </div>
+        </div>
+
+        <!-- Dock inferior derecho: botón AR principal -->
+        <div class="dock dock-right">
+            <button id="ar-button-trigger" class="btn btn-primary ar-btn" aria-label="Iniciar modo Realidad Aumentada">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                Ver en tu espacio
+            </button>
+        </div>
+
+        <!-- Pista de interacción (se auto-oculta) -->
+        <div id="interaction-hint" class="hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+            Arrastra para rotar · Scroll para acercar
+        </div>
+
+        <!-- Indicador de estado AR -->
+        <div id="ar-status-toast" class="ar-toast">
+            <span class="ar-toast-dot"></span>
+            <span id="ar-status-text">Buscando superficie...</span>
+        </div>
+
+    </section>
+
+    <!-- ===================== PANEL LATERAL (DRAWER) ===================== -->
+    <div id="panel-scrim" class="scrim hidden"></div>
+    <aside id="panel" class="panel" aria-label="Panel de exploración" aria-hidden="true">
+        <div class="panel-head">
+            <h2 class="panel-title">Explorar</h2>
+            <button id="close-panel" class="icon-btn icon-btn-sm" aria-label="Cerrar panel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <section class="panel-section">
+            <h3 class="panel-h3"><span class="text-accent2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg></span> Modelos</h3>
+            <div class="model-list">
+                <button class="model-item active" data-id="apartamento1" data-src="./apartamento1.glb" data-name="Apartamento 1" data-ios="./apartamento1.usdz">
+                    <span class="model-item-dot"></span>
+                    <span class="model-item-text">
+                        <span class="model-item-name">Apartamento 1</span>
+                        <span class="model-item-sub">Interior · maqueta</span>
+                    </span>
+                    <svg class="model-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </button>
+                <button class="model-item" data-id="optimus" data-src="./bumblebee_-_optimus_prime_transform_animation.glb" data-name="Optimus Prime" data-ios="./bumblebee.usdz">
+                    <span class="model-item-dot"></span>
+                    <span class="model-item-text">
+                        <span class="model-item-name">Optimus Prime</span>
+                        <span class="model-item-sub">Transformación · animado</span>
+                    </span>
+                    <svg class="model-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </button>
+                <button class="model-item" data-id="maqueta1" data-src="./city.glb" data-name="Maqueta 1" data-loop="true" data-ios="./city.usdz">
+                    <span class="model-item-dot"></span>
+                    <span class="model-item-text">
+                        <span class="model-item-name">Maqueta 1</span>
+                        <span class="model-item-sub">Escena urbana · animada</span>
+                    </span>
+                    <svg class="model-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </button>
+                <button class="model-item" data-id="maqueta2" data-src="./city2.glb" data-name="Maqueta 2" data-loop="true" data-ios="./city2.usdz">
+                    <span class="model-item-dot"></span>
+                    <span class="model-item-text">
+                        <span class="model-item-name">Maqueta 2</span>
+                        <span class="model-item-sub">Escena urbana · animada</span>
+                    </span>
+                    <svg class="model-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </button>
+                <button class="model-item" data-id="lamborghini" data-src="./lamborghini.glb" data-name="Lamborghini" data-ios="./lamborghini.usdz">
+                    <span class="model-item-dot"></span>
+                    <span class="model-item-text">
+                        <span class="model-item-name">Lamborghini</span>
+                        <span class="model-item-sub">Centenario LP-770 · interior</span>
+                    </span>
+                    <svg class="model-item-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </button>
+            </div>
+        </section>
+
+        <section class="panel-section">
+            <a href="./ar-marcador.html" class="marker-cta">
+                <span class="marker-cta-ico">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                </span>
+                <span class="marker-cta-text">
+                    <span class="marker-cta-title">AR con tarjeta (por imagen)</span>
+                    <span class="marker-cta-sub">Apunta la cámara a una tarjeta impresa y el modelo aparece encima</span>
+                </span>
+                <svg class="marker-cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </a>
+        </section>
+
+        <section class="panel-section">
+            <h3 class="panel-h3"><span class="text-accent2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></span> Cómo usarlo</h3>
+            <ol class="steps">
+                <li><span class="step-num">1</span><span><b>Visualiza:</b> arrastra para rotar el modelo.</span></li>
+                <li><span class="step-num">2</span><span><b>Inicia AR:</b> pulsa “Ver en tu espacio”.</span></li>
+                <li><span class="step-num">3</span><span><b>Detecta:</b> apunta a una superficie plana.</span></li>
+                <li><span class="step-num">4</span><span><b>Coloca:</b> el modelo se ancla solo.</span></li>
+                <li><span class="step-num">5</span><span><b>Interactúa:</b> con dos dedos mueve y escala.</span></li>
+            </ol>
+            <div class="note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span><b>Nota:</b> usa WebXR. Requiere Android (ARCore) o iPhone/iPad (ARKit · Safari).</span>
+            </div>
+        </section>
+    </aside>
+
+    <!-- ===================== MODAL DE AYUDA ===================== -->
+    <div id="help-modal" class="modal hidden">
+        <div class="modal-card animate-fade-in-up">
+            <button id="close-help" class="icon-btn icon-btn-sm modal-close" aria-label="Cerrar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <h3 class="modal-title">Soporte y dispositivos</h3>
+            <div class="modal-body">
+                <p><b>iOS (iPhone/iPad):</b> requiere iOS 12+. Safari abre el visor AR de ARKit (Quick Look).</p>
+                <p><b>Android:</b> requiere Chrome y un dispositivo compatible con ARCore.</p>
+                <p><b>PC de escritorio:</b> sin AR, pero con vista previa 3D interactiva completa.</p>
+                <p class="dim">Si el modelo no carga, verifica que el archivo .glb no esté dañado.</p>
+            </div>
+            <button id="close-help-btn" class="btn btn-primary modal-ok">Entendido</button>
+        </div>
+    </div>
+
+    <!-- ===================== SELECTOR DE ENTRADA (MÓVIL) ===================== -->
+    <div id="model-picker" class="picker hidden">
+        <div class="picker-inner">
+            <span class="logo-badge picker-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></span>
+            <h2 class="picker-title">¿Qué modelo quieres ver?</h2>
+            <p class="picker-sub">Elige uno para verlo en 3D y Realidad Aumentada</p>
+            <div class="picker-grid">
+                <button class="picker-item picker-item--featured" data-id="apartamento1"><img src="./thumbs/apartamento1.png" alt="" loading="lazy"><span>Apartamento 1</span></button>
+                <button class="picker-item" data-id="optimus"><img src="./thumbs/optimus.png" alt="" loading="lazy"><span>Optimus Prime</span></button>
+                <button class="picker-item" data-id="maqueta1"><img src="./thumbs/maqueta1.png" alt="" loading="lazy"><span>Maqueta 1</span></button>
+                <button class="picker-item" data-id="maqueta2"><img src="./thumbs/maqueta2.png" alt="" loading="lazy"><span>Maqueta 2</span></button>
+                <button class="picker-item" data-id="lamborghini"><img src="./thumbs/lamborghini.png" alt="" loading="lazy"><span>Lamborghini</span></button>
+            </div>
+            <button id="picker-skip" class="picker-skip">Explorar libremente →</button>
+        </div>
+    </div>
+
+    <!-- Lógica de la aplicación -->
+    <script src="./app.js" defer></script>
+</body>
+</html>

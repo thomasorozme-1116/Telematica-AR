@@ -1,0 +1,332 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // Referencias al DOM
+    const modelViewer = document.getElementById('ar-model');
+    const modelNameSpan = document.getElementById('model-name');
+    const modelSwitch = document.getElementById('model-switch');
+    const arButton = document.getElementById('ar-button-trigger');
+    const arStatusToast = document.getElementById('ar-status-toast');
+    const arStatusText = document.getElementById('ar-status-text');
+    const helpModal = document.getElementById('help-modal');
+    const helpBtn = document.getElementById('help-btn');
+    const closeHelpBtn = document.getElementById('close-help-btn');
+    const closeHelpIcon = document.getElementById('close-help');
+    const replayContainer = document.getElementById('replay-container');
+    const replayBtn = document.getElementById('replay-anim');
+    const panel = document.getElementById('panel');
+    const panelScrim = document.getElementById('panel-scrim');
+    const openPanelBtn = document.getElementById('open-panel');
+    const closePanelBtn = document.getElementById('close-panel');
+    const interactionHint = document.getElementById('interaction-hint');
+
+    // --- Lógica AR y UI ---
+
+    // Verificar soporte AR para mostrar/ocultar botón
+    modelViewer.addEventListener('ar-status', () => {
+        if (!modelViewer.canActivateAR) {
+            arButton.style.display = 'none';
+            const parent = arButton.parentElement;
+            const noArMsg = document.createElement('div');
+            noArMsg.className = "text-xs text-red-400 text-center bg-black/80 px-3 py-2 rounded border border-red-900/50";
+            noArMsg.textContent = "Tu navegador no soporta WebXR. Usa la vista 3D interactiva.";
+            parent.appendChild(noArMsg);
+        }
+    });
+
+    // Lanzar AR (compartido por el botón del hero y el CTA inferior)
+    function startAR() {
+        if (window.trackEvent) window.trackEvent('ar_launch', { modelo: modelNameSpan.textContent });
+        // Mostrar estado de "Buscando" antes de que el navegador tome el control
+        arStatusToast.style.opacity = '1';
+        arStatusText.textContent = "Iniciando cámara y buscando superficie...";
+
+        // Llamada nativa a la API de model-viewer
+        modelViewer.activateAR().catch((error) => {
+            console.error("Error al iniciar AR:", error);
+            arStatusText.textContent = "Error al iniciar AR. Revisa la consola.";
+            setTimeout(() => { arStatusToast.style.opacity = '0'; }, 3000);
+        });
+    }
+    arButton.addEventListener('click', startAR);
+    const arCta = document.getElementById('ar-cta');
+    if (arCta) arCta.addEventListener('click', startAR);
+
+    // --- Barra de Progreso de Carga ---
+    const loadBar = document.getElementById('load-bar');
+    const loadPct = document.getElementById('load-pct');
+    modelViewer.addEventListener('progress', (event) => {
+        const pct = Math.round((event.detail.totalProgress || 0) * 100);
+        if (loadBar) loadBar.style.width = pct + '%';
+        if (loadPct) loadPct.textContent = pct < 100 ? `Cargando modelo… ${pct}%` : 'Preparando escena…';
+    });
+
+    // --- Control de Animación ---
+
+    // Algunos modelos van en bucle (data-loop en el selector) y NO muestran el botón "Reactivar";
+    // el resto se reproducen una sola vez y muestran "Reactivar" al terminar.
+    const activeItem = document.querySelector('.model-item.active');
+    let loopAnimation = activeItem ? activeItem.dataset.loop === 'true' : false;
+
+    // Arranca la animación del modelo actual: en bucle o una sola vez según loopAnimation
+    function startAnimation() {
+        const anims = modelViewer.availableAnimations || [];
+        if (anims.length === 0) return;
+        replayContainer.classList.add('hidden');
+        // Fija (como atributo) un clip válido para el modelo actual
+        const clip = anims.includes(modelViewer.animationName) ? modelViewer.animationName : anims[0];
+        modelViewer.setAttribute('animation-name', clip);
+        const play = () => {
+            modelViewer.currentTime = 0;
+            try {
+                if (loopAnimation) modelViewer.play();          // bucle infinito
+                else modelViewer.play({ repetitions: 1 });      // una sola vez
+            } catch (e) {
+                modelViewer.play();
+            }
+        };
+        play();
+        // Re-forzar tras aplicar el cambio de animation-name (evita carreras al conmutar de modelo)
+        requestAnimationFrame(play);
+        setTimeout(play, 120);
+    }
+
+    // Reactivar animación al hacer clic (solo aplica a modelos sin bucle)
+    replayBtn.addEventListener('click', startAnimation);
+
+    // Cuando la animación termina, mostrar "Reactivar" solo si el modelo NO es en bucle
+    modelViewer.addEventListener('finished', () => {
+        if (!loopAnimation && modelViewer.availableAnimations && modelViewer.availableAnimations.length > 0) {
+            replayContainer.classList.remove('hidden');
+        }
+    });
+
+    // Escuchar eventos del visor para actualizar UI
+    modelViewer.addEventListener('load', () => {
+        document.getElementById('loading-spinner').style.display = 'none';
+        startAnimation();
+        // Fade-in del nuevo modelo (espera un frame para que ya esté renderizado)
+        requestAnimationFrame(() => modelViewer.classList.remove('switching'));
+        scheduleAutoAdvance();
+    });
+
+    // --- Auto-avance: pasa solo al siguiente modelo mientras no haya interacción ---
+    let idleTimer = null;
+    let arActive = false;
+    let carouselEnabled = true;   // se desactiva si se abre un modelo concreto por QR (?modelo=)
+    const AUTO_ADVANCE_MS = 9000;
+
+    function scheduleAutoAdvance() {
+        if (!carouselEnabled) return;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(advanceModel, AUTO_ADVANCE_MS);
+    }
+
+    function advanceModel() {
+        // No avanzar si el usuario está en el panel, en un modal o en AR
+        if (arActive || panel.classList.contains('open') || helpModal.classList.contains('flex')) {
+            scheduleAutoAdvance();
+            return;
+        }
+        const items = Array.from(document.querySelectorAll('.model-item'));
+        if (items.length < 2) return;
+        const idx = items.findIndex((b) => b.classList.contains('active'));
+        const next = items[(idx + 1) % items.length];
+        // El próximo avance se reprograma cuando el nuevo modelo termine de cargar (evento 'load')
+        setModel(next.dataset.src, next.dataset.name, next.dataset.ios || null, next.dataset.loop === 'true');
+    }
+
+    // Cualquier interacción reinicia el temporizador de inactividad
+    ['pointerdown', 'wheel', 'keydown', 'touchstart'].forEach((ev) =>
+        document.addEventListener(ev, scheduleAutoAdvance, { passive: true }));
+    modelViewer.addEventListener('camera-change', (e) => {
+        if (e.detail && e.detail.source === 'user-interaction') scheduleAutoAdvance();
+    });
+    // Pausa el auto-avance durante una sesión de Realidad Aumentada
+    modelViewer.addEventListener('ar-status', (e) => {
+        arActive = e.detail.status === 'session-started';
+        if (arActive) clearTimeout(idleTimer);
+        else scheduleAutoAdvance();
+    });
+
+    // Evento que se dispara cuando la sesión AR cambia de estado
+    modelViewer.addEventListener('ar-status', (event) => {
+        const status = event.detail.status;
+        if (status === 'failed') {
+            arStatusText.textContent = "Error: No se pudo detectar superficie o se perdió el seguimiento.";
+            setTimeout(() => { arStatusToast.style.opacity = '0'; }, 4000);
+        }
+    });
+
+    // --- Sistema de Notificaciones (Toast) ---
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `fixed bottom-4 left-4 z-50 px-4 py-3 rounded-xl shadow-lg border text-sm transition-all duration-500 transform translate-y-10 opacity-0 ${
+            type === 'error' ? 'bg-red-900/90 border-red-500 text-red-100' : 'bg-white text-black border-transparent'
+        }`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        // Animación de entrada
+        requestAnimationFrame(() => {
+            toast.classList.remove('translate-y-10', 'opacity-0');
+        });
+
+        // Auto-eliminación
+        setTimeout(() => {
+            toast.classList.add('translate-y-10', 'opacity-0');
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
+    // --- Modal de Ayuda ---
+    function toggleHelp(show) {
+        if (show) {
+            helpModal.classList.remove('hidden');
+            helpModal.classList.add('flex');
+        } else {
+            helpModal.classList.add('hidden');
+            helpModal.classList.remove('flex');
+        }
+    }
+
+    helpBtn.addEventListener('click', () => toggleHelp(true));
+    closeHelpBtn.addEventListener('click', () => toggleHelp(false));
+    closeHelpIcon.addEventListener('click', () => toggleHelp(false));
+    helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) toggleHelp(false);
+    });
+
+    // --- Panel lateral (drawer) ---
+    function togglePanel(show) {
+        panel.classList.toggle('open', show);
+        panel.setAttribute('aria-hidden', show ? 'false' : 'true');
+        panelScrim.classList.toggle('hidden', !show);
+    }
+    openPanelBtn.addEventListener('click', () => togglePanel(true));
+    closePanelBtn.addEventListener('click', () => togglePanel(false));
+    panelScrim.addEventListener('click', () => togglePanel(false));
+
+    // Cerrar con tecla Escape (accesibilidad)
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (helpModal.classList.contains('flex')) toggleHelp(false);
+        if (panel.classList.contains('open')) togglePanel(false);
+    });
+
+    // --- Pista de interacción: se auto-oculta ---
+    function hideHint() { if (interactionHint) interactionHint.classList.add('hint-hidden'); }
+    setTimeout(hideHint, 5000);
+    document.getElementById('stage').addEventListener('pointerdown', hideHint, { once: true });
+
+    // --- Selector de modelos ---
+    function resetLoader() {
+        const spinner = document.getElementById('loading-spinner');
+        if (spinner) spinner.style.display = '';
+        if (loadBar) loadBar.style.width = '0%';
+        if (loadPct) loadPct.textContent = 'Cargando modelo… 0%';
+        replayContainer.classList.add('hidden');
+    }
+    function setModel(src, name, iosSrc, loop) {
+        loopAnimation = loop === true;
+        if (window.trackEvent) window.trackEvent('model_view', { modelo: name });
+        replayContainer.classList.add('hidden');
+        document.querySelectorAll('.model-item').forEach((b) => b.classList.toggle('active', b.dataset.src === src));
+        togglePanel(false);
+        // 1) Desvanece el modelo actual
+        modelViewer.classList.add('switching');
+        // 2) Tras el desvanecido, carga el nuevo (el evento 'load' lo vuelve a mostrar)
+        setTimeout(() => {
+            resetLoader();
+            if (iosSrc) modelViewer.setAttribute('ios-src', iosSrc);
+            else modelViewer.removeAttribute('ios-src');
+            modelViewer.removeAttribute('animation-name');
+            modelNameSpan.textContent = name;
+            modelViewer.src = src;
+        }, 450);
+    }
+    document.querySelectorAll('.model-item').forEach((btn) => {
+        btn.addEventListener('click', () => setModel(btn.dataset.src, btn.dataset.name, btn.dataset.ios || null, btn.dataset.loop === 'true'));
+    });
+
+    // Abrir el selector de modelos desde la píldora del nombre (abajo a la izquierda)
+    if (modelSwitch) modelSwitch.addEventListener('click', () => togglePanel(true));
+
+    // --- Deep link por QR: ?modelo=<id> abre ese modelo directamente y desactiva el carrusel ---
+    const qrId = (new URLSearchParams(location.search).get('modelo') || new URLSearchParams(location.search).get('model') || '').replace(/[^a-z0-9_-]/gi, '');
+    if (qrId) {
+        const item = document.querySelector('.model-item[data-id="' + qrId + '"]');
+        if (item) {
+            carouselEnabled = false;
+            clearTimeout(idleTimer);
+            if (window.trackEvent) window.trackEvent('qr_open', { modelo: item.dataset.name });
+            setModel(item.dataset.src, item.dataset.name, item.dataset.ios || null, item.dataset.loop === 'true');
+        }
+    }
+
+    // --- Selector de entrada en móvil: elige un modelo con miniaturas ---
+    const picker = document.getElementById('model-picker');
+    if (picker) {
+        const isMobile = window.matchMedia('(max-width: 820px)').matches || ('ontouchstart' in window);
+        // Se muestra al entrar en móvil (salvo que se venga de un QR con modelo)
+        if (isMobile && !qrId) {
+            carouselEnabled = false;
+            clearTimeout(idleTimer);
+            picker.classList.remove('hidden');
+        }
+        // Abre la cámara AR directamente para el modelo elegido
+        function launchARDirect(item) {
+            const ua = navigator.userAgent;
+            const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isAndroid = /Android/.test(ua);
+            const glbUrl = new URL(item.dataset.src, location.href).href;
+            const usdzUrl = item.dataset.ios ? new URL(item.dataset.ios, location.href).href : null;
+            if (isIOS && usdzUrl) {
+                // iOS: Quick Look (muestra el modelo y el botón AR)
+                const a = document.createElement('a');
+                a.setAttribute('rel', 'ar');
+                a.setAttribute('href', usdzUrl);
+                a.appendChild(document.createElement('img'));
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => a.remove(), 1500);
+                return true;
+            }
+            if (isAndroid) {
+                // Android: Scene Viewer directo a la cámara AR
+                const intent = 'intent://arvr.google.com/scene-viewer/1.0?file=' + encodeURIComponent(glbUrl) +
+                    '&mode=ar_only&title=' + encodeURIComponent(item.dataset.name) +
+                    '#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;S.browser_fallback_url=' +
+                    encodeURIComponent(location.href) + ';end;';
+                window.location.href = intent;
+                return true;
+            }
+            return false;
+        }
+
+        picker.querySelectorAll('.picker-item').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const item = document.querySelector('.model-item[data-id="' + btn.dataset.id + '"]');
+                if (!item) return;
+                carouselEnabled = false;
+                clearTimeout(idleTimer);
+                if (window.trackEvent) window.trackEvent('picker_ar', { modelo: item.dataset.name });
+                picker.classList.add('hidden');
+                // Carga el modelo en el visor (para cuando vuelva del AR) y abre la cámara AR
+                setModel(item.dataset.src, item.dataset.name, item.dataset.ios || null, item.dataset.loop === 'true');
+                launchARDirect(item);
+            });
+        });
+        const skip = document.getElementById('picker-skip');
+        if (skip) skip.addEventListener('click', () => {
+            picker.classList.add('hidden');
+            carouselEnabled = true;
+            scheduleAutoAdvance();
+        });
+    }
+
+    // Manejo del estado de carga inicial
+    modelViewer.addEventListener('model-visibility', (event) => {
+        if (event.detail.visible) {
+            document.getElementById('loading-spinner').style.display = 'none';
+        }
+    });
+});
